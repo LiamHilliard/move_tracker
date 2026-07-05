@@ -15,8 +15,7 @@
  *
  * Run with: npm run snapshot
  */
-import { config } from "dotenv";
-config({ path: ".env.local" });
+import "./load-env";
 
 import * as readline from "node:readline";
 import { Readable } from "node:stream";
