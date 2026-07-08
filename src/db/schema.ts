@@ -60,6 +60,7 @@ export const watches = sqliteTable("watches", {
   seasonNumber: integer("season_number"),
   // half-star scale: 0.5–5.0
   rating: real("rating").notNull(),
+  // "YYYY-MM" month granularity; rows logged before 2026-07 may be "YYYY-MM-DD"
   watchedAt: text("watched_at").notNull(),
   isRewatch: integer("is_rewatch", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at")

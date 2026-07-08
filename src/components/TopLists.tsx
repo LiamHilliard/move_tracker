@@ -17,7 +17,7 @@ export function TopLists({ movies, shows }: { movies: ListItem[]; shows: ListIte
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-1 rounded-xl border border-zinc-800 bg-zinc-900/60 p-1">
           {(["movies", "shows"] as const).map((t) => (
             <button

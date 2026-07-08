@@ -31,21 +31,24 @@ export function Stars({ rating, className = "h-3.5" }: { rating: number; classNa
   );
 }
 
-/** Interactive half-star picker. */
+/** Interactive half-star picker. `sm` drops the label for compact rows. */
 export function StarPicker({
   value,
   onChange,
+  size = "md",
 }: {
   value: number | null;
   onChange: (rating: number) => void;
+  size?: "md" | "sm";
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const shown = hover ?? value ?? 0;
+  const box = size === "md" ? "h-10 w-10" : "h-7 w-7";
   return (
     <div className="flex flex-col items-center gap-1">
-      <div className="flex h-10" onMouseLeave={() => setHover(null)}>
+      <div className={size === "md" ? "flex h-10" : "flex h-7"} onMouseLeave={() => setHover(null)}>
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="relative h-10 w-10">
+          <div key={i} className={`relative ${box}`}>
             <div className="pointer-events-none h-full w-full text-amber-400">
               <Star fill={shown >= i ? 1 : shown >= i - 0.5 ? 0.5 : 0} />
             </div>
@@ -67,9 +70,11 @@ export function StarPicker({
           </div>
         ))}
       </div>
-      <span className="h-4 text-sm text-zinc-400">
-        {shown > 0 ? `${shown} / 5` : "Tap to rate"}
-      </span>
+      {size === "md" && (
+        <span className="h-4 text-sm text-zinc-400">
+          {shown > 0 ? `${shown} / 5` : "Tap to rate"}
+        </span>
+      )}
     </div>
   );
 }

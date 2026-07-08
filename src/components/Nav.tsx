@@ -15,16 +15,16 @@ export function Nav() {
   const pathname = usePathname();
   return (
     <header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-5xl items-center gap-6 px-4 py-3 sm:px-6">
-        <Link href="/" className="text-lg font-bold tracking-tight">
+      <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-3 py-3 sm:gap-6 sm:px-6">
+        <Link href="/" className="shrink-0 text-lg font-bold tracking-tight">
           🎬 <span className="hidden sm:inline">Watch Tracker</span>
         </Link>
-        <nav className="flex gap-1">
+        <nav className="flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {LINKS.map((l) => (
             <Link
               key={l.href}
               href={l.href}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+              className={`shrink-0 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium sm:px-3 ${
                 pathname === l.href
                   ? "bg-zinc-800 text-zinc-50"
                   : "text-zinc-400 hover:text-zinc-200"

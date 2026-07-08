@@ -2,28 +2,24 @@
 
 import Image from "next/image";
 import { useEffect, useState, useTransition } from "react";
-import { logWatch, toggleWatchlist, updateLatestWatch } from "@/app/actions";
+import { logWatches, toggleWatchlist, updateLatestWatch } from "@/app/actions";
 import { TMDB_POSTER_BASE } from "@/lib/tmdb-images";
 import type { ListItem } from "@/lib/types";
+import { MonthPicker, thisMonth } from "./MonthPicker";
 import { StarPicker, Stars } from "./Stars";
-
-function today(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 export function LogDialog({ item, onClose }: { item: ListItem; onClose: () => void }) {
   const isTv = item.mediaType === "tv";
-  const [rating, setRating] = useState<number | null>(null);
-  const [date, setDate] = useState(today());
-  const [season, setSeason] = useState<number>(() => {
-    if (!isTv) return 0;
+  // Selected seasons → rating (movies use a single `null` scope).
+  const [ratings, setRatings] = useState<Map<number | null, number | null>>(() => {
+    if (!isTv) return new Map([[null, null]]);
     // default to the first season not yet rated
     for (let s = 1; s <= (item.seasonCount ?? 99); s++) {
-      if (!item.scopes.some((sc) => sc.season === s)) return s;
+      if (!item.scopes.some((sc) => sc.season === s)) return new Map([[s, null]]);
     }
-    return 1;
+    return new Map([[1, null]]);
   });
+  const [month, setMonth] = useState(thisMonth());
   const [seasonCount, setSeasonCount] = useState<number | null>(item.seasonCount);
   const [mode, setMode] = useState<"rewatch" | "update">("rewatch");
   const [pending, startTransition] = useTransition();
@@ -56,27 +52,52 @@ export function LogDialog({ item, onClose }: { item: ListItem; onClose: () => vo
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const scope = item.scopes.find((sc) => sc.season === (isTv ? season : null));
-  const alreadyRated = scope != null;
+  const selected = [...ratings.keys()].sort((a, b) => (a ?? 0) - (b ?? 0));
+  const ratedScope = (season: number | null) =>
+    item.scopes.find((sc) => sc.season === season);
+
+  // "Rewatch vs fix rating" only makes sense for a single already-rated scope.
+  const single = selected.length === 1 ? selected[0] : undefined;
+  const singleRated = selected.length === 1 ? ratedScope(single ?? null) : undefined;
+  const updating = singleRated != null && mode === "update";
+  const complete = selected.length > 0 && [...ratings.values()].every((r) => r != null);
+
+  function toggleSeason(s: number) {
+    setRatings((prev) => {
+      const next = new Map(prev);
+      if (next.has(s)) {
+        if (next.size > 1) next.delete(s);
+      } else {
+        next.set(s, null);
+      }
+      return next;
+    });
+  }
+
+  function setRating(scope: number | null, rating: number) {
+    setRatings((prev) => new Map(prev).set(scope, rating));
+  }
 
   function submit() {
-    if (rating == null) return;
+    if (!complete) return;
     setError(null);
     startTransition(async () => {
       try {
-        if (alreadyRated && mode === "update") {
+        if (updating) {
           await updateLatestWatch({
             titleId: item.titleId,
-            rating,
-            seasonNumber: isTv ? season : null,
+            rating: ratings.get(single ?? null)!,
+            seasonNumber: single ?? null,
           });
         } else {
-          await logWatch({
+          await logWatches({
             titleId: item.titleId,
-            rating,
-            watchedAt: date,
-            seasonNumber: isTv ? season : null,
-            isRewatch: alreadyRated,
+            watchedAt: month,
+            entries: selected.map((scope) => ({
+              seasonNumber: scope,
+              rating: ratings.get(scope)!,
+              isRewatch: ratedScope(scope) != null,
+            })),
           });
         }
         onClose();
@@ -99,7 +120,7 @@ export function LogDialog({ item, onClose }: { item: ListItem; onClose: () => vo
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-t-2xl border border-zinc-800 bg-zinc-950 p-5 sm:rounded-2xl"
+        className="max-h-[88dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl border border-zinc-800 bg-zinc-950 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:max-h-[90vh] sm:rounded-2xl sm:pb-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex gap-4">
@@ -118,10 +139,10 @@ export function LogDialog({ item, onClose }: { item: ListItem; onClose: () => vo
               {item.year}
               {item.genres.length > 0 && ` · ${item.genres.slice(0, 3).join(", ")}`}
             </p>
-            {alreadyRated && (
+            {singleRated && (
               <p className="mt-1 flex items-center gap-1.5 text-sm text-zinc-400">
-                Rated <Stars rating={scope.rating} className="h-3" />
-                {isTv ? ` (S${season})` : ""}
+                Rated <Stars rating={singleRated.rating} className="h-3" />
+                {isTv ? ` (S${single})` : ""}
               </p>
             )}
             {providers && providers.length > 0 && (
@@ -145,20 +166,22 @@ export function LogDialog({ item, onClose }: { item: ListItem; onClose: () => vo
 
         {isTv && (
           <div className="mt-4">
-            <p className="mb-1.5 text-sm text-zinc-400">Season</p>
+            <p className="mb-1.5 text-sm text-zinc-400">
+              Seasons <span className="text-zinc-600">— pick as many as you watched</span>
+            </p>
             {seasonCount == null ? (
               <p className="text-sm text-zinc-500">Loading seasons…</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {Array.from({ length: seasonCount }, (_, i) => i + 1).map((s) => {
-                  const rated = item.scopes.some((sc) => sc.season === s);
+                  const rated = ratedScope(s) != null;
                   return (
                     <button
                       key={s}
                       type="button"
-                      onClick={() => setSeason(s)}
+                      onClick={() => toggleSeason(s)}
                       className={`h-9 min-w-9 rounded-lg border px-2 text-sm ${
-                        season === s
+                        ratings.has(s)
                           ? "border-amber-500 bg-amber-500/15 text-amber-300"
                           : "border-zinc-700 text-zinc-300 hover:border-zinc-500"
                       }`}
@@ -173,11 +196,32 @@ export function LogDialog({ item, onClose }: { item: ListItem; onClose: () => vo
           </div>
         )}
 
-        <div className="mt-5 flex justify-center">
-          <StarPicker value={rating} onChange={setRating} />
-        </div>
+        {selected.length === 1 ? (
+          <div className="mt-5 flex justify-center">
+            <StarPicker
+              value={ratings.get(selected[0]) ?? null}
+              onChange={(r) => setRating(selected[0], r)}
+            />
+          </div>
+        ) : (
+          <ul className="mt-4 space-y-1.5">
+            {selected.map((s) => (
+              <li
+                key={s}
+                className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-1.5"
+              >
+                <span className="text-sm font-medium text-zinc-300">Season {s}</span>
+                <StarPicker
+                  size="sm"
+                  value={ratings.get(s) ?? null}
+                  onChange={(r) => setRating(s, r)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
 
-        {alreadyRated && (
+        {singleRated && (
           <div className="mt-4 grid grid-cols-2 gap-1.5">
             <button
               type="button"
@@ -204,17 +248,11 @@ export function LogDialog({ item, onClose }: { item: ListItem; onClose: () => vo
           </div>
         )}
 
-        {!(alreadyRated && mode === "update") && (
-          <label className="mt-4 block">
-            <span className="text-sm text-zinc-400">Watched on</span>
-            <input
-              type="date"
-              value={date}
-              max={today()}
-              onChange={(e) => setDate(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-zinc-100 [color-scheme:dark]"
-            />
-          </label>
+        {!updating && (
+          <div className="mt-4">
+            <p className="mb-1 text-sm text-zinc-400">Watched in</p>
+            <MonthPicker value={month} onChange={setMonth} />
+          </div>
         )}
 
         {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
@@ -223,10 +261,16 @@ export function LogDialog({ item, onClose }: { item: ListItem; onClose: () => vo
           <button
             type="button"
             onClick={submit}
-            disabled={rating == null || pending}
+            disabled={!complete || pending}
             className="flex-1 rounded-lg bg-amber-500 px-4 py-2.5 font-semibold text-zinc-950 disabled:opacity-40"
           >
-            {pending ? "Saving…" : alreadyRated && mode === "update" ? "Update rating" : "Log watch"}
+            {pending
+              ? "Saving…"
+              : updating
+                ? "Update rating"
+                : selected.length > 1
+                  ? `Log ${selected.length} seasons`
+                  : "Log watch"}
           </button>
           <button
             type="button"

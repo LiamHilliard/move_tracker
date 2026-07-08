@@ -13,28 +13,45 @@ function assertRating(rating: number) {
   }
 }
 
-function assertDate(date: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`Invalid date: ${date}`);
+// Watch dates are tracked at month granularity ("YYYY-MM"); rows logged
+// before this change may still carry a full "YYYY-MM-DD".
+function assertMonth(month: string) {
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error(`Invalid month: ${month}`);
 }
 
-export async function logWatch(input: {
+export async function logWatches(input: {
   titleId: number;
-  rating: number;
   watchedAt: string;
-  seasonNumber?: number | null;
-  isRewatch: boolean;
+  entries: { seasonNumber: number | null; rating: number; isRewatch: boolean }[];
 }) {
-  assertRating(input.rating);
-  assertDate(input.watchedAt);
-  await db.insert(watches).values({
-    titleId: input.titleId,
-    rating: input.rating,
-    watchedAt: input.watchedAt,
-    seasonNumber: input.seasonNumber ?? null,
-    isRewatch: input.isRewatch,
-  });
+  assertMonth(input.watchedAt);
+  if (input.entries.length === 0) throw new Error("Nothing to log");
+  for (const e of input.entries) assertRating(e.rating);
+  await db.insert(watches).values(
+    input.entries.map((e) => ({
+      titleId: input.titleId,
+      rating: e.rating,
+      watchedAt: input.watchedAt,
+      seasonNumber: e.seasonNumber,
+      isRewatch: e.isRewatch,
+    })),
+  );
   // Logging something you meant to watch clears it from the watchlist.
   await db.delete(watchlist).where(eq(watchlist.titleId, input.titleId));
+  revalidatePath("/", "layout");
+}
+
+export async function updateWatch(input: {
+  watchId: number;
+  rating: number;
+  watchedAt: string;
+}) {
+  assertRating(input.rating);
+  assertMonth(input.watchedAt);
+  await db
+    .update(watches)
+    .set({ rating: input.rating, watchedAt: input.watchedAt })
+    .where(eq(watches.id, input.watchId));
   revalidatePath("/", "layout");
 }
 
@@ -100,6 +117,17 @@ export async function ensureTitle(input: {
     [title] = await db.insert(titles).values(row).returning();
   }
 
+  return withTrackingState(title);
+}
+
+/** Loads an already-known title as a ListItem with the user's tracking state. */
+export async function getListItem(titleId: number): Promise<ListItem> {
+  const [title] = await db.select().from(titles).where(eq(titles.id, titleId));
+  if (!title) throw new Error(`Unknown title: ${titleId}`);
+  return withTrackingState(title);
+}
+
+async function withTrackingState(title: typeof titles.$inferSelect): Promise<ListItem> {
   const [watchRows, watchlistRows] = await Promise.all([
     db
       .select()
