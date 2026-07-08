@@ -6,8 +6,8 @@ import { deleteWatch, getListItem, updateWatch } from "@/app/actions";
 import { TMDB_POSTER_BASE } from "@/lib/tmdb-images";
 import type { ListItem } from "@/lib/types";
 import { LogDialog } from "./LogDialog";
-import { MonthPicker } from "./MonthPicker";
 import { StarPicker, Stars } from "./Stars";
+import { bucketToMonth, WhenPicker, type WatchedBucket } from "./WhenPicker";
 
 export interface HistoryEntry {
   watchId: number;
@@ -114,10 +114,13 @@ function EditWatchDialog({
   onClose: () => void;
 }) {
   const [rating, setRating] = useState<number>(entry.rating);
-  const [month, setMonth] = useState(entry.watchedAt.slice(0, 7));
+  // Keep the entry's existing month unless the user picks a new bucket.
+  const [when, setWhen] = useState<WatchedBucket | null>(null);
   const [logItem, setLogItem] = useState<ListItem | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  const month = when ? bucketToMonth(when) : entry.watchedAt.slice(0, 7);
 
   // "Log more seasons" hands off to the regular LogDialog for this title.
   if (logItem) {
@@ -195,8 +198,13 @@ function EditWatchDialog({
         </div>
 
         <div className="mt-4">
-          <p className="mb-1 text-sm text-zinc-400">Watched in</p>
-          <MonthPicker value={month} onChange={setMonth} />
+          <p className="mb-1 text-sm text-zinc-400">Watched</p>
+          <WhenPicker value={when} onChange={setWhen} />
+          {when == null && (
+            <p className="mt-1 text-xs text-zinc-500">
+              Currently {monthLabel(entry.watchedAt)}
+            </p>
+          )}
         </div>
 
         {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
