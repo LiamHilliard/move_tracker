@@ -12,16 +12,21 @@ export function PosterCard({
   priority,
 }: {
   item: ListItem;
-  onClick: () => void;
+  /** Omit to render a non-interactive card (guest mode). */
+  onClick?: () => void;
   providers?: { name: string; logoPath: string }[];
   priority?: boolean;
 }) {
   const watched = isWatched(item);
+  const Wrapper = onClick ? "button" : "div";
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group relative block w-full overflow-hidden rounded-lg bg-zinc-900 text-left ring-zinc-700 transition hover:ring-2 focus-visible:ring-2 focus-visible:ring-amber-500"
+    <Wrapper
+      {...(onClick ? { type: "button" as const, onClick } : {})}
+      className={`group relative block w-full overflow-hidden rounded-lg bg-zinc-900 text-left ${
+        onClick
+          ? "ring-zinc-700 transition hover:ring-2 focus-visible:ring-2 focus-visible:ring-amber-500"
+          : ""
+      }`}
     >
       <div className="relative aspect-[2/3] w-full">
         {item.posterPath ? (
@@ -31,7 +36,9 @@ export function PosterCard({
             fill
             priority={priority}
             sizes="(max-width: 640px) 33vw, (max-width: 1024px) 25vw, 20vw"
-            className={`object-cover transition ${watched ? "opacity-40" : "group-hover:opacity-80"}`}
+            className={`object-cover transition ${
+              watched ? "opacity-40" : onClick ? "group-hover:opacity-80" : ""
+            }`}
           />
         ) : (
           <div className="flex h-full items-center justify-center p-2 text-center text-sm text-zinc-500">
@@ -91,6 +98,6 @@ export function PosterCard({
           </p>
         )}
       </div>
-    </button>
+    </Wrapper>
   );
 }

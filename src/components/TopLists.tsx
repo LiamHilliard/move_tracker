@@ -5,7 +5,15 @@ import { isWatched, type ListItem } from "@/lib/types";
 import { LogDialog } from "./LogDialog";
 import { PosterCard } from "./PosterCard";
 
-export function TopLists({ movies, shows }: { movies: ListItem[]; shows: ListItem[] }) {
+export function TopLists({
+  movies,
+  shows,
+  canLog,
+}: {
+  movies: ListItem[];
+  shows: ListItem[];
+  canLog: boolean;
+}) {
   const [tab, setTab] = useState<"movies" | "shows">("movies");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
@@ -32,10 +40,12 @@ export function TopLists({ movies, shows }: { movies: ListItem[]; shows: ListIte
             </button>
           ))}
         </div>
-        <p className="text-sm text-zinc-400">
-          <span className="font-semibold text-amber-400">{watchedCount}</span>/{items.length}{" "}
-          watched
-        </p>
+        {canLog && (
+          <p className="text-sm text-zinc-400">
+            <span className="font-semibold text-amber-400">{watchedCount}</span>/
+            {items.length} watched
+          </p>
+        )}
       </div>
 
       <div className="mt-5 grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5">
@@ -44,12 +54,14 @@ export function TopLists({ movies, shows }: { movies: ListItem[]; shows: ListIte
             key={item.titleId}
             item={item}
             priority={i < 5}
-            onClick={() => setSelectedId(item.titleId)}
+            onClick={canLog ? () => setSelectedId(item.titleId) : undefined}
           />
         ))}
       </div>
 
-      {selected && <LogDialog item={selected} onClose={() => setSelectedId(null)} />}
+      {canLog && selected && (
+        <LogDialog item={selected} onClose={() => setSelectedId(null)} />
+      )}
     </div>
   );
 }

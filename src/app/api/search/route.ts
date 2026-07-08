@@ -1,7 +1,8 @@
-import { inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { titles, watches, watchlist } from "@/db/schema";
+import { getCurrentUser } from "@/lib/current-user";
 import { searchMulti } from "@/lib/tmdb";
 
 export interface SearchResult {
@@ -15,6 +16,9 @@ export interface SearchResult {
 }
 
 export async function GET(req: Request) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
   const q = new URL(req.url).searchParams.get("q")?.trim();
   if (!q) return NextResponse.json({ results: [] });
 
@@ -34,8 +38,14 @@ export async function GET(req: Request) {
   const knownIds = [...knownByKey.values()];
   const [watchRows, watchlistRows] = knownIds.length
     ? await Promise.all([
-        db.select({ titleId: watches.titleId }).from(watches).where(inArray(watches.titleId, knownIds)),
-        db.select({ titleId: watchlist.titleId }).from(watchlist).where(inArray(watchlist.titleId, knownIds)),
+        db
+          .select({ titleId: watches.titleId })
+          .from(watches)
+          .where(and(eq(watches.userId, user.id), inArray(watches.titleId, knownIds))),
+        db
+          .select({ titleId: watchlist.titleId })
+          .from(watchlist)
+          .where(and(eq(watchlist.userId, user.id), inArray(watchlist.titleId, knownIds))),
       ])
     : [[], []];
   const watchedIds = new Set(watchRows.map((w) => w.titleId));

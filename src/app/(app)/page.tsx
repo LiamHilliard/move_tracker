@@ -2,11 +2,14 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { titles, topListEntries, watches, watchlist } from "@/db/schema";
 import { TopLists } from "@/components/TopLists";
+import { getCurrentUser } from "@/lib/current-user";
 import type { ListItem } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-async function loadLists(): Promise<{ movies: ListItem[]; shows: ListItem[] }> {
+async function loadLists(
+  userId: number | null,
+): Promise<{ movies: ListItem[]; shows: ListItem[] }> {
   const [entries, watchRows, watchlistRows] = await Promise.all([
     db
       .select({
@@ -17,8 +20,17 @@ async function loadLists(): Promise<{ movies: ListItem[]; shows: ListItem[] }> {
       .from(topListEntries)
       .innerJoin(titles, eq(titles.id, topListEntries.titleId))
       .orderBy(asc(topListEntries.rank)),
-    db.select().from(watches).orderBy(asc(watches.watchedAt), asc(watches.id)),
-    db.select().from(watchlist),
+    // Guests get the bare lists — no personal badges to compute.
+    userId == null
+      ? []
+      : db
+          .select()
+          .from(watches)
+          .where(eq(watches.userId, userId))
+          .orderBy(asc(watches.watchedAt), asc(watches.id)),
+    userId == null
+      ? []
+      : db.select().from(watchlist).where(eq(watchlist.userId, userId)),
   ]);
 
   // Latest rating per (title, season) scope; rows are ordered oldest→newest,
@@ -57,16 +69,19 @@ async function loadLists(): Promise<{ movies: ListItem[]; shows: ListItem[] }> {
 }
 
 export default async function Home() {
-  const { movies, shows } = await loadLists();
+  const user = await getCurrentUser();
+  const { movies, shows } = await loadLists(user?.id ?? null);
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <header className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">Top Lists</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          The top 100 movies and 20 shows — tap a poster to log it.
+          {user
+            ? "The top 100 movies and 20 shows — tap a poster to log it."
+            : "The top 100 movies and 20 shows — log in to track what you've watched."}
         </p>
       </header>
-      <TopLists movies={movies} shows={shows} />
+      <TopLists movies={movies} shows={shows} canLog={user != null} />
     </main>
   );
 }

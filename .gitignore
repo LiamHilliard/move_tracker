@@ -43,4 +43,7 @@ next-env.d.ts
 # local sqlite
 local.db*
 
+# user-data backups (may contain personal watch history)
+/backups
+
 !.env.example

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { titles } from "@/db/schema";
 import { tmdb } from "@/lib/tmdb";
+import { getCurrentUser } from "@/lib/current-user";
 
 // Returns the season count for a TV title, fetching from TMDB and caching
 // in the DB on first request.
@@ -10,6 +11,9 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (!(await getCurrentUser())) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
   const { id } = await params;
   const titleId = Number(id);
   const [title] = await db.select().from(titles).where(eq(titles.id, titleId));

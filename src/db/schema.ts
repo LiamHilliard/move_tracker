@@ -7,6 +7,24 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
+export const users = sqliteTable(
+  "users",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    // stored lowercase; login lookups lowercase the input
+    username: text("username").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    // bumped on password reset / deactivation to invalidate outstanding cookies
+    tokenVersion: integer("token_version").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (t) => [uniqueIndex("users_username_idx").on(t.username)],
+);
+
 export const titles = sqliteTable(
   "titles",
   {
@@ -53,6 +71,13 @@ export const topListEntries = sqliteTable(
 
 export const watches = sqliteTable("watches", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  // default(1) exists only so the multi-user migration could backfill
+  // pre-existing rows to the first admin via an additive ALTER; every
+  // write path sets userId explicitly from the session.
+  userId: integer("user_id")
+    .notNull()
+    .default(1)
+    .references(() => users.id),
   titleId: integer("title_id")
     .notNull()
     .references(() => titles.id),
@@ -72,6 +97,11 @@ export const watchlist = sqliteTable(
   "watchlist",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
+    // see watches.userId for why default(1) exists
+    userId: integer("user_id")
+      .notNull()
+      .default(1)
+      .references(() => users.id),
     titleId: integer("title_id")
       .notNull()
       .references(() => titles.id),
@@ -79,9 +109,10 @@ export const watchlist = sqliteTable(
       .notNull()
       .default(sql`(datetime('now'))`),
   },
-  (t) => [uniqueIndex("watchlist_title_idx").on(t.titleId)],
+  (t) => [uniqueIndex("watchlist_user_title_idx").on(t.userId, t.titleId)],
 );
 
+export type User = typeof users.$inferSelect;
 export type Title = typeof titles.$inferSelect;
 export type TopListEntry = typeof topListEntries.$inferSelect;
 export type Watch = typeof watches.$inferSelect;

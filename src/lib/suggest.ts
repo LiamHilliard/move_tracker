@@ -18,7 +18,7 @@ const SIMILAR_LIMIT = 18;
 const MAX_SEEDS = 8;
 const MIN_VOTE_COUNT = 100;
 
-export async function buildSuggestions(): Promise<{
+export async function buildSuggestions(userId: number): Promise<{
   classics: Suggestion[];
   similar: Suggestion[];
   seedCount: number;
@@ -33,11 +33,13 @@ export async function buildSuggestions(): Promise<{
       .select({ watch: watches, title: titles })
       .from(watches)
       .innerJoin(titles, eq(titles.id, watches.titleId))
+      .where(eq(watches.userId, userId))
       .orderBy(asc(watches.watchedAt), asc(watches.id)),
     db
       .select({ item: watchlist, title: titles })
       .from(watchlist)
-      .innerJoin(titles, eq(titles.id, watchlist.titleId)),
+      .innerJoin(titles, eq(titles.id, watchlist.titleId))
+      .where(eq(watchlist.userId, userId)),
   ]);
 
   // Latest rating per (title, season) scope, plus per-title latest info.

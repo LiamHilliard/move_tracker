@@ -4,6 +4,7 @@ import { and, asc, desc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { titles, watches, watchlist } from "@/db/schema";
+import { requireUser } from "@/lib/current-user";
 import { movieDetails, tvDetails } from "@/lib/tmdb";
 import type { ListItem } from "@/lib/types";
 
@@ -24,11 +25,13 @@ export async function logWatches(input: {
   watchedAt: string;
   entries: { seasonNumber: number | null; rating: number; isRewatch: boolean }[];
 }) {
+  const user = await requireUser();
   assertMonth(input.watchedAt);
   if (input.entries.length === 0) throw new Error("Nothing to log");
   for (const e of input.entries) assertRating(e.rating);
   await db.insert(watches).values(
     input.entries.map((e) => ({
+      userId: user.id,
       titleId: input.titleId,
       rating: e.rating,
       watchedAt: input.watchedAt,
@@ -37,7 +40,9 @@ export async function logWatches(input: {
     })),
   );
   // Logging something you meant to watch clears it from the watchlist.
-  await db.delete(watchlist).where(eq(watchlist.titleId, input.titleId));
+  await db
+    .delete(watchlist)
+    .where(and(eq(watchlist.userId, user.id), eq(watchlist.titleId, input.titleId)));
   revalidatePath("/", "layout");
 }
 
@@ -46,12 +51,15 @@ export async function updateWatch(input: {
   rating: number;
   watchedAt: string;
 }) {
+  const user = await requireUser();
   assertRating(input.rating);
   assertMonth(input.watchedAt);
-  await db
+  const updated = await db
     .update(watches)
     .set({ rating: input.rating, watchedAt: input.watchedAt })
-    .where(eq(watches.id, input.watchId));
+    .where(and(eq(watches.id, input.watchId), eq(watches.userId, user.id)))
+    .returning({ id: watches.id });
+  if (updated.length === 0) throw new Error("No such watch");
   revalidatePath("/", "layout");
 }
 
@@ -60,11 +68,13 @@ export async function updateLatestWatch(input: {
   rating: number;
   seasonNumber?: number | null;
 }) {
+  const user = await requireUser();
   assertRating(input.rating);
-  const scope =
-    input.seasonNumber != null
-      ? and(eq(watches.titleId, input.titleId), eq(watches.seasonNumber, input.seasonNumber))
-      : eq(watches.titleId, input.titleId);
+  const scope = and(
+    eq(watches.userId, user.id),
+    eq(watches.titleId, input.titleId),
+    ...(input.seasonNumber != null ? [eq(watches.seasonNumber, input.seasonNumber)] : []),
+  );
   const [latest] = await db
     .select({ id: watches.id })
     .from(watches)
@@ -84,6 +94,7 @@ export async function ensureTitle(input: {
   tmdbId: number;
   mediaType: "movie" | "tv";
 }): Promise<ListItem> {
+  const user = await requireUser();
   let [title] = await db
     .select()
     .from(titles)
@@ -117,24 +128,31 @@ export async function ensureTitle(input: {
     [title] = await db.insert(titles).values(row).returning();
   }
 
-  return withTrackingState(title);
+  return withTrackingState(title, user.id);
 }
 
 /** Loads an already-known title as a ListItem with the user's tracking state. */
 export async function getListItem(titleId: number): Promise<ListItem> {
+  const user = await requireUser();
   const [title] = await db.select().from(titles).where(eq(titles.id, titleId));
   if (!title) throw new Error(`Unknown title: ${titleId}`);
-  return withTrackingState(title);
+  return withTrackingState(title, user.id);
 }
 
-async function withTrackingState(title: typeof titles.$inferSelect): Promise<ListItem> {
+async function withTrackingState(
+  title: typeof titles.$inferSelect,
+  userId: number,
+): Promise<ListItem> {
   const [watchRows, watchlistRows] = await Promise.all([
     db
       .select()
       .from(watches)
-      .where(eq(watches.titleId, title.id))
+      .where(and(eq(watches.userId, userId), eq(watches.titleId, title.id)))
       .orderBy(asc(watches.watchedAt), asc(watches.id)),
-    db.select().from(watchlist).where(eq(watchlist.titleId, title.id)),
+    db
+      .select()
+      .from(watchlist)
+      .where(and(eq(watchlist.userId, userId), eq(watchlist.titleId, title.id))),
   ]);
   const scopes = new Map<number | null, { rating: number; count: number }>();
   for (const w of watchRows) {
@@ -157,19 +175,23 @@ async function withTrackingState(title: typeof titles.$inferSelect): Promise<Lis
 }
 
 export async function deleteWatch(watchId: number) {
-  await db.delete(watches).where(eq(watches.id, watchId));
+  const user = await requireUser();
+  const deleted = await db
+    .delete(watches)
+    .where(and(eq(watches.id, watchId), eq(watches.userId, user.id)))
+    .returning({ id: watches.id });
+  if (deleted.length === 0) throw new Error("No such watch");
   revalidatePath("/", "layout");
 }
 
 export async function toggleWatchlist(titleId: number) {
-  const existing = await db
-    .select({ id: watchlist.id })
-    .from(watchlist)
-    .where(eq(watchlist.titleId, titleId));
+  const user = await requireUser();
+  const mine = and(eq(watchlist.userId, user.id), eq(watchlist.titleId, titleId));
+  const existing = await db.select({ id: watchlist.id }).from(watchlist).where(mine);
   if (existing.length > 0) {
-    await db.delete(watchlist).where(eq(watchlist.titleId, titleId));
+    await db.delete(watchlist).where(mine);
   } else {
-    await db.insert(watchlist).values({ titleId });
+    await db.insert(watchlist).values({ userId: user.id, titleId });
   }
   revalidatePath("/", "layout");
 }

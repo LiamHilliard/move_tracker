@@ -4,16 +4,19 @@ import { db } from "@/db";
 import { titles, watchlist } from "@/db/schema";
 import { WatchlistGrid } from "@/components/WatchlistGrid";
 import { getProviders } from "@/lib/providers";
+import { requireUser } from "@/lib/current-user";
 import type { ListItem } from "@/lib/types";
 
 export const metadata = { title: "Watchlist · Watch Tracker" };
 export const dynamic = "force-dynamic";
 
 export default async function WatchlistPage() {
+  const user = await requireUser();
   const rows = await db
     .select({ item: watchlist, title: titles })
     .from(watchlist)
     .innerJoin(titles, eq(titles.id, watchlist.titleId))
+    .where(eq(watchlist.userId, user.id))
     .orderBy(asc(watchlist.addedAt), asc(watchlist.id));
 
   const providerLists = await Promise.all(rows.map(({ title }) => getProviders(title)));

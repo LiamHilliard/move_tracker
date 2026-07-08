@@ -2,15 +2,18 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { titles, watches } from "@/db/schema";
 import { HistoryList, type HistoryEntry } from "@/components/HistoryList";
+import { requireUser } from "@/lib/current-user";
 
 export const metadata = { title: "History · Watch Tracker" };
 export const dynamic = "force-dynamic";
 
 export default async function HistoryPage() {
+  const user = await requireUser();
   const rows = await db
     .select({ watch: watches, title: titles })
     .from(watches)
     .innerJoin(titles, eq(titles.id, watches.titleId))
+    .where(eq(watches.userId, user.id))
     .orderBy(desc(watches.watchedAt), desc(watches.id));
 
   const entries: HistoryEntry[] = rows.map(({ watch, title }) => ({

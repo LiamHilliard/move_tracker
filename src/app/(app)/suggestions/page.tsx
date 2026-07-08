@@ -1,11 +1,13 @@
 import { SuggestionsView } from "@/components/SuggestionsView";
 import { buildSuggestions } from "@/lib/suggest";
+import { requireUser } from "@/lib/current-user";
 
 export const metadata = { title: "Suggestions · Watch Tracker" };
 export const dynamic = "force-dynamic";
 
 export default async function SuggestionsPage() {
-  const { classics, similar, seedCount } = await buildSuggestions();
+  const user = await requireUser();
+  const { classics, similar, seedCount } = await buildSuggestions(user.id);
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <h1 className="mb-1 text-2xl font-bold tracking-tight">Suggestions</h1>
