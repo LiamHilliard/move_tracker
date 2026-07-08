@@ -5,8 +5,8 @@ import { useEffect, useState, useTransition } from "react";
 import { logWatches, toggleWatchlist, updateLatestWatch } from "@/app/actions";
 import { TMDB_POSTER_BASE } from "@/lib/tmdb-images";
 import type { ListItem } from "@/lib/types";
-import { MonthPicker, thisMonth } from "./MonthPicker";
 import { StarPicker, Stars } from "./Stars";
+import { bucketToMonth, WhenPicker, type WatchedBucket } from "./WhenPicker";
 
 export function LogDialog({ item, onClose }: { item: ListItem; onClose: () => void }) {
   const isTv = item.mediaType === "tv";
@@ -19,7 +19,7 @@ export function LogDialog({ item, onClose }: { item: ListItem; onClose: () => vo
     }
     return new Map([[1, null]]);
   });
-  const [month, setMonth] = useState(thisMonth());
+  const [when, setWhen] = useState<WatchedBucket>("today");
   const [seasonCount, setSeasonCount] = useState<number | null>(item.seasonCount);
   const [mode, setMode] = useState<"rewatch" | "update">("rewatch");
   const [pending, startTransition] = useTransition();
@@ -92,7 +92,7 @@ export function LogDialog({ item, onClose }: { item: ListItem; onClose: () => vo
         } else {
           await logWatches({
             titleId: item.titleId,
-            watchedAt: month,
+            watchedAt: bucketToMonth(when),
             entries: selected.map((scope) => ({
               seasonNumber: scope,
               rating: ratings.get(scope)!,
@@ -250,8 +250,8 @@ export function LogDialog({ item, onClose }: { item: ListItem; onClose: () => vo
 
         {!updating && (
           <div className="mt-4">
-            <p className="mb-1 text-sm text-zinc-400">Watched in</p>
-            <MonthPicker value={month} onChange={setMonth} />
+            <p className="mb-1 text-sm text-zinc-400">Watched</p>
+            <WhenPicker value={when} onChange={setWhen} />
           </div>
         )}
 

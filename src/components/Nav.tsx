@@ -8,7 +8,6 @@ const USER_LINKS = [
   { href: "/", label: "Top Lists" },
   { href: "/suggestions", label: "Suggestions" },
   { href: "/watchlist", label: "Watchlist" },
-  { href: "/log", label: "Log" },
   { href: "/history", label: "History" },
 ] as const;
 

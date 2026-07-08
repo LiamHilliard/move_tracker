@@ -29,9 +29,13 @@ const RATINGS_URL = "https://datasets.imdbws.com/title.ratings.tsv.gz";
 const BASICS_URL = "https://datasets.imdbws.com/title.basics.tsv.gz";
 const MIN_VOTES = 25_000;
 
+// `take` is a buffer beyond what the site displays (top 100 movies / 20 shows).
+// The extra ranks let the Top Lists page hide titles you've watched and
+// backfill from further down the chart so the list stays full. See
+// DISPLAY_LIMIT in src/components/TopLists.tsx.
 const LISTS = {
-  movies: { take: 100, kind: "movie", imdbTypes: ["movie"] },
-  shows: { take: 20, kind: "tv", imdbTypes: ["tvSeries", "tvMiniSeries"] },
+  movies: { take: 150, kind: "movie", imdbTypes: ["movie"] },
+  shows: { take: 40, kind: "tv", imdbTypes: ["tvSeries", "tvMiniSeries"] },
 } as const;
 
 async function* tsvLines(url: string): AsyncGenerator<string> {
