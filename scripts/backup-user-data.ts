@@ -1,17 +1,26 @@
 import "./load-env";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { sql } from "drizzle-orm";
 import { db } from "../src/db";
-import { titles, watches, watchlist } from "../src/db/schema";
 
 // Dumps the personal tables (watches, watchlist) to backups/backup-<ts>.json
 // so a schema migration gone wrong can be undone with restore-user-data.ts.
+//
+// Reads with raw `SELECT *` (not the typed schema) on purpose: this runs
+// against the OLD database *before* a migration, so it must capture whatever
+// columns exist then, not the columns the current schema code expects.
+
+async function selectAll(table: string): Promise<Record<string, unknown>[]> {
+  const res = await db.run(sql.raw(`select * from ${table}`));
+  return res.rows as unknown as Record<string, unknown>[];
+}
 
 async function main() {
   const url = process.env.DATABASE_URL ?? "file:local.db";
   const [watchRows, watchlistRows, titleRows] = await Promise.all([
-    db.select().from(watches),
-    db.select().from(watchlist),
-    db.select({ id: titles.id }).from(titles),
+    selectAll("watches"),
+    selectAll("watchlist"),
+    selectAll("titles"),
   ]);
 
   mkdirSync("backups", { recursive: true });
